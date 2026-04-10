@@ -363,7 +363,7 @@ npm run dev
 ### Access:
 - **Visualizer:** http://localhost:3000
 - **Manage page:** http://localhost:3000/manage
-- **API:** http://localhost:8081/api
+- **API:** http://localhost:8082/api
 - **Jenkins:** http://localhost:8080
 
 ### Background services (should already be running):
@@ -374,7 +374,9 @@ npm run dev
 
 ## Real-Time Updates (WebSocket)
 
-Every browser connects to `ws://localhost:8081/api/ws/releases`. When any change happens — whether from the website, another user, or Jenkins — every browser gets updated instantly.
+- **Backend REST API**: Spring Boot 3.2.5 (port 8082)
+- **Frontend Context**: React 18 + Vite (port 3000)
+- **Real-time Engine**: native WebSockets (`ws://localhost:8082/api/ws/releases`). When any change happens — whether from the website, another user, or Jenkins — every browser gets updated instantly.
 
 **How it works:**
 1. `ReleaseWebSocketHandler.java` maintains a set of all connected WebSocket sessions

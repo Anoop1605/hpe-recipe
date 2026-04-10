@@ -575,6 +575,12 @@ export default function App() {
               whiteSpace: 'nowrap',
             }}>Compare</button>
           )}
+          <Link to="/catalogs" style={{
+            padding: '7px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+            background: T.bgSurface, border: `1px solid ${T.border}`,
+            color: T.textMuted, textDecoration: 'none', cursor: 'pointer', transition: 'all 0.2s',
+            whiteSpace: 'nowrap',
+          }}>Catalogs</Link>
           <Link to="/manage" style={{
             padding: '7px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600,
             background: T.teal, color: T.white, textDecoration: 'none',

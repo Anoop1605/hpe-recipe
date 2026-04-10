@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 const API_BASE = '/api';
-const WS_URL = `ws://${window.location.hostname}:8081/api/ws/releases`;
+const WS_URL = `ws://${window.location.hostname}:8082/api/ws/releases`;
 
 export default function useRealtimeReleases() {
   const [helmReleases, setHelmReleases] = useState([]);

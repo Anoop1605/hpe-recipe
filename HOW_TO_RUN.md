@@ -27,12 +27,12 @@ cd backend
 mvn spring-boot:run
 ```
 
-Backend starts on **http://localhost:8081/api**
+Backend starts on **http://localhost:8082/api**
 
 ### 3. Verify Backend is Running
 
 ```bash
-curl http://localhost:8081/api/health
+curl http://localhost:8082/api/health
 ```
 
 Expected response:
@@ -170,11 +170,11 @@ helm uninstall recipe-detection
 
 | Issue | Fix |
 |-------|-----|
-| Port 8081 already in use | Kill the process: `netstat -ano \| findstr :8081` then `taskkill /PID <pid> /F` |
+| Port 8082 already in use | Kill the process: `netstat -ano \| findstr :8082` then `taskkill /PID <pid> /F` |
 | Port 3000 already in use | Kill the process or change port in `frontend/vite.config.js` |
 | Maven build fails | Ensure JDK 17+ is installed and `JAVA_HOME` is set |
 | npm install fails | Delete `node_modules` and `package-lock.json`, then run `npm install` again |
-| Frontend can't reach backend | Make sure backend is running first on port 8081 |
+| Frontend can't reach backend | Make sure backend is running first on port 8082 |
 
 ---
 
@@ -182,7 +182,7 @@ helm uninstall recipe-detection
 
 ```
 hpe-recipe-detection/
-├── backend/          # Spring Boot REST API (Java 17, port 8081)
+├── backend/          # Spring Boot REST API (Java 17, port 8082)
 ├── frontend/         # React UI (Vite, port 3000)
 ├── helm/             # Kubernetes Helm chart
 ├── docs/             # Architecture & implementation docs

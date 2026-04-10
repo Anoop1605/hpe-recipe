@@ -664,6 +664,11 @@ export default function ManagePage() {
           }}>
             ← Visualizer
           </Link>
+          <Link to="/catalogs" style={{
+            ...btnSecondary, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            Catalogs
+          </Link>
           <button onClick={refresh} style={btnSecondary}>Refresh</button>
         </div>
       </header>
