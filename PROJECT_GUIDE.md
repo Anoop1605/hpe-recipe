@@ -2,7 +2,7 @@
 
 ## What This Project Does
 
-This project manages Helm release recipe metadata and deployment status for two Kubernetes targets (`dev` and `prod`).
+This project manages Helm release recipe metadata and deployment status for four Kubernetes targets (`dev`, `prod`, `qa`, `integration`).
 
 Engineers can:
 - Create a Helm release draft from UI
@@ -17,7 +17,7 @@ Engineers can:
 2. Backend stores it as draft in backend memory (not in Kubernetes).
 3. User clicks Deploy.
 4. Backend sets status to `deploying`, generates `values-v<version>.yaml`, updates `Chart.yaml`, commits and pushes to Git.
-5. Backend triggers Jenkins `buildWithParameters` with `CLUSTER=dev|prod` (with Jenkins crumb and basic auth).
+5. Backend triggers Jenkins `buildWithParameters` with `CLUSTER=dev|prod|qa|integration` (with Jenkins crumb and basic auth).
 6. Jenkins runs Helm install/upgrade on the selected kube-context.
 7. Jenkins calls `PUT /api/helm-releases/{version}/status?cluster=...` with `deployed` or `failed`.
 8. Backend broadcasts status changes over WebSocket and, on `deployed`, removes draft state if Helm-managed data is present.
@@ -91,7 +91,7 @@ hpe-recipe/
 ### 1) Visualizer (`/`)
 
 Capabilities currently present:
-- Cluster selector (`dev` / `prod` via query param)
+- Cluster selector (`dev` / `prod` / `qa` / `integration` via query param)
 - Helm version timeline
 - Recipe dependency graph (React Flow + Dagre)
 - Component expansion for selected recipe
@@ -135,25 +135,25 @@ Note: Helm release APIs are cluster-scoped and require `cluster` query param.
 
 | Method | Endpoint |
 | --- | --- |
-| GET | `/api/helm-releases?cluster=dev|prod` |
-| GET | `/api/helm-releases/{version}?cluster=dev|prod` |
-| POST | `/api/helm-releases?cluster=dev|prod` |
-| PUT | `/api/helm-releases/{version}?cluster=dev|prod` |
-| DELETE | `/api/helm-releases/{version}?cluster=dev|prod` |
-| PUT | `/api/helm-releases/{version}/status?cluster=dev|prod` |
-| POST | `/api/helm-releases/{version}/deploy?cluster=dev|prod` |
-| GET | `/api/helm-releases/compare?cluster=dev|prod&from=X&to=Y` |
+| GET | `/api/helm-releases?cluster=dev|prod|qa|integration` |
+| GET | `/api/helm-releases/{version}?cluster=dev|prod|qa|integration` |
+| POST | `/api/helm-releases?cluster=dev|prod|qa|integration` |
+| PUT | `/api/helm-releases/{version}?cluster=dev|prod|qa|integration` |
+| DELETE | `/api/helm-releases/{version}?cluster=dev|prod|qa|integration` |
+| PUT | `/api/helm-releases/{version}/status?cluster=dev|prod|qa|integration` |
+| POST | `/api/helm-releases/{version}/deploy?cluster=dev|prod|qa|integration` |
+| GET | `/api/helm-releases/compare?cluster=dev|prod|qa|integration&from=X&to=Y` |
 
 ### Recipes Within Release
 
 | Method | Endpoint |
 | --- | --- |
-| GET | `/api/helm-releases/{v}/recipes?cluster=dev|prod` |
-| POST | `/api/helm-releases/{v}/recipes?cluster=dev|prod` |
-| PUT | `/api/helm-releases/{v}/recipes/{rv}?cluster=dev|prod` |
-| DELETE | `/api/helm-releases/{v}/recipes/{rv}?cluster=dev|prod` |
-| GET | `/api/helm-releases/{v}/recipes/{rv}/components?cluster=dev|prod` |
-| GET | `/api/helm-releases/{v}/recipes/{rv}/upgradePaths?cluster=dev|prod` |
+| GET | `/api/helm-releases/{v}/recipes?cluster=dev|prod|qa|integration` |
+| POST | `/api/helm-releases/{v}/recipes?cluster=dev|prod|qa|integration` |
+| PUT | `/api/helm-releases/{v}/recipes/{rv}?cluster=dev|prod|qa|integration` |
+| DELETE | `/api/helm-releases/{v}/recipes/{rv}?cluster=dev|prod|qa|integration` |
+| GET | `/api/helm-releases/{v}/recipes/{rv}/components?cluster=dev|prod|qa|integration` |
+| GET | `/api/helm-releases/{v}/recipes/{rv}/upgradePaths?cluster=dev|prod|qa|integration` |
 
 ### Legacy Catalog APIs
 
@@ -172,7 +172,7 @@ Note: Helm release APIs are cluster-scoped and require `cluster` query param.
 
 ## WebSocket Contract
 
-- Endpoint used by frontend: `ws://<host>:8081/api/ws/releases?cluster=dev|prod`
+- Endpoint used by frontend: `ws://<host>:8081/api/ws/releases?cluster=dev|prod|qa|integration`
 - Server registration path: `/api/ws/releases`
 
 Events broadcast:
@@ -230,6 +230,8 @@ Key runtime settings in `backend/src/main/resources/application.yml`:
 - Cluster contexts configured:
   - `dev -> dev`
   - `prod -> prod`
+  - `qa -> qa`
+  - `integration -> integration`
 
 Required environment variables for deploy flow:
 - `JENKINS_USER`

@@ -4,7 +4,7 @@ This guide explains how to run the project locally with:
 
 * React Frontend
 * Spring Boot Backend
-* Kubernetes (Minikube: dev + prod clusters)
+* Kubernetes (Minikube: dev + prod + qa + integration clusters)
 * Helm
 * Jenkins CI/CD (with CSRF crumb support)
 * GitHub (GitOps-style integration)
@@ -38,7 +38,7 @@ GitHub (Helm values)
    ↓
 Jenkins Pipeline
    ↓
-Kubernetes (dev / prod)
+Kubernetes (dev / prod / qa / integration)
 ```
 
 ---
@@ -107,6 +107,10 @@ kubernetes:
       context: dev
     prod:
       context: prod
+    qa:
+      context: qa
+    integration:
+      context: integration
 ```
 
 ---
@@ -118,6 +122,8 @@ kubernetes:
 ```bash
 minikube start -p dev
 minikube start -p prod
+minikube start -p qa
+minikube start -p integration
 ```
 
 ## Verify contexts
@@ -131,6 +137,8 @@ Expected:
 ```text
 dev
 prod
+qa
+integration
 ```
 
 ---
@@ -225,12 +233,12 @@ Expected:
 
 ### Step 2: Deploy (UI)
 
-* Calls backend `POST /api/helm-releases/{version}/deploy?cluster=dev|prod`
+* Calls backend `POST /api/helm-releases/{version}/deploy?cluster=dev|prod|qa|integration`
 * Backend marks draft as `deploying`, pushes GitOps values, and triggers Jenkins
 
 ### Step 3: Jenkins Pipeline
 
-* Selects cluster (dev/prod)
+* Selects cluster (dev/prod/qa/integration)
 * Runs Helm upgrade/install (first actual write to cluster)
 * Calls backend status API (`deployed`/`failed`), then backend reads state from cluster
 
@@ -249,6 +257,14 @@ helm install recipe-dev . -f values-v0.0.1.yaml
 kubectl config use-context prod
 helm install recipe-prod . -f values-v0.0.2.yaml
 
+# Install on qa cluster
+kubectl config use-context qa
+helm install recipe-qa . -f values-v0.0.3.yaml
+
+# Install on integration cluster
+kubectl config use-context integration
+helm install recipe-integration . -f values-v0.0.4.yaml
+
 
 # Delete
 helm uninstall recipe-dev
@@ -261,6 +277,8 @@ helm uninstall recipe-dev
 ```bash
 minikube stop -p dev
 minikube stop -p prod
+minikube stop -p qa
+minikube stop -p integration
 ```
 
 ---
@@ -303,7 +321,7 @@ hpe-recipe/
 # 🏁 Final Notes
 
 ```text
-✔ Multi-cluster deployment (dev + prod)
+✔ Multi-cluster deployment (dev + prod + qa + integration)
 ✔ Jenkins CI/CD integrated
 ✔ Secure API (CSRF handled)
 ✔ GitOps-style workflow
