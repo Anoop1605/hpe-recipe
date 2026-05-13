@@ -1,24 +1,31 @@
 package com.hpe.recipe.service;
 
-import com.hpe.recipe.model.HelmRelease;
-import com.hpe.recipe.model.Recipe;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.util.HashMap;
+import java.util.Map;
+
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.yaml.snakeyaml.DumperOptions;
-import org.yaml.snakeyaml.Yaml;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
+import com.hpe.recipe.model.HelmRelease;
 
 @Service
 public class GitOpsService {
+
+    private static final Logger log = LoggerFactory.getLogger(GitOpsService.class);
+
+    // Configured Jackson for YAML generation
+    private final ObjectMapper yamlMapper;
 
     @Value("${gitops.repo-url}")
     private String repoUrl;
@@ -32,11 +39,18 @@ public class GitOpsService {
     @Value("${gitops.username}")
     private String username;
 
-    @Value("${gitops.token}")
+    @Value("${gitops.token:}")
     private String token;
 
     @Value("${gitops.values-dir}")
     private String valuesDir;
+
+    public GitOpsService() {
+        // Disable the "---" document start marker for cleaner Helm YAML
+        YAMLFactory yamlFactory = new YAMLFactory()
+                .disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER);
+        this.yamlMapper = new ObjectMapper(yamlFactory);
+    }
 
     /**
      * Generate a Helm values YAML file from a HelmRelease and push it to GitHub.
@@ -44,39 +58,56 @@ public class GitOpsService {
      */
     public synchronized void generateAndPush(HelmRelease release) throws Exception {
         File repoDir = new File(localPath);
+
+        log.info("Starting GitOps push for release v{}", release.getVersion());
+
+        if (token == null || token.isBlank()) {
+            throw new IllegalStateException(
+                    "GITOPS_TOKEN is not set. Please check your .env file or environment variables.");
+        }
+
         Git git = getOrCloneRepo(repoDir);
 
         try {
-            // Pull latest
+            // 1. Pull latest to avoid stale branch errors
             git.pull()
-                .setCredentialsProvider(getCredentials())
-                .setRemoteBranchName(branch)
-                .call();
+                    .setCredentialsProvider(getCredentials())
+                    .setRemoteBranchName(branch)
+                    .call();
 
-            // Generate values file
-            String valuesYaml = generateValuesYaml(release);
+            // 2. Generate values file using Jackson
             String valuesFileName = "values-v" + release.getVersion() + ".yaml";
             File valuesFile = new File(repoDir, valuesDir + "/" + valuesFileName);
-            writeFile(valuesFile, valuesYaml);
 
-            // Update Chart.yaml version
+            // Wrap the release in a "recipeData" root node to match Helm expectations
+            Map<String, Object> rootNode = new HashMap<>();
+            rootNode.put("recipeData", release);
+
+            valuesFile.getParentFile().mkdirs();
+            yamlMapper.writeValue(valuesFile, rootNode);
+            log.info("Generated values file: {}", valuesFile.getPath());
+
+            // 3. Update Chart.yaml version
             File chartFile = new File(repoDir, valuesDir + "/Chart.yaml");
             updateChartVersion(chartFile, release.getVersion());
 
-            // Stage, commit, push
+            // 4. Stage, commit, push
             git.add().addFilepattern(valuesDir + "/" + valuesFileName).call();
             git.add().addFilepattern(valuesDir + "/Chart.yaml").call();
 
             git.commit()
-                .setMessage("Release v" + release.getVersion() + ": update recipe values\n\n"
-                    + "Recipes: " + release.getRecipes().size() + " recipe(s)\n"
-                    + "Triggered from Recipe Detection UI")
-                .setAuthor("Recipe Detection", "recipe-detection@hpe.com")
-                .call();
+                    .setMessage("Release v" + release.getVersion() + ": update recipe values\n\n"
+                            + "Recipes: " + (release.getRecipes() != null ? release.getRecipes().size() : 0)
+                            + " recipe(s)\n"
+                            + "Triggered from Recipe Detection UI")
+                    .setAuthor("Recipe Detection", "recipe-detection@hpe.com")
+                    .call();
 
             git.push()
-                .setCredentialsProvider(getCredentials())
-                .call();
+                    .setCredentialsProvider(getCredentials())
+                    .call();
+
+            log.info("GitOps push successful for version {}", release.getVersion());
 
         } finally {
             git.close();
@@ -88,11 +119,12 @@ public class GitOpsService {
             try {
                 return Git.open(repoDir);
             } catch (IOException e) {
-                // Corrupted repo — delete and re-clone
+                log.warn("Corrupted local repo detected. Deleting and re-cloning...");
                 deleteDirectory(repoDir);
             }
         }
 
+        log.info("Cloning repository from {}", repoUrl);
         return Git.cloneRepository()
                 .setURI(repoUrl)
                 .setDirectory(repoDir)
@@ -105,74 +137,12 @@ public class GitOpsService {
         return new UsernamePasswordCredentialsProvider(username, token);
     }
 
-    /**
-     * Generate YAML matching the existing values-v*.yaml format:
-     *
-     * recipeData:
-     *   chartVersion: "0.0.4"
-     *   recipes:
-     *     - version: "1.6.0"
-     *       description: "..."
-     *       components:
-     *         spark: "3.5.0"
-     *       upgradePaths:
-     *         - "1.5.0"
-     */
-    String generateValuesYaml(HelmRelease release) {
-        DumperOptions options = new DumperOptions();
-        options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
-        options.setPrettyFlow(true);
-        options.setDefaultScalarStyle(DumperOptions.ScalarStyle.PLAIN);
-        Yaml yaml = new Yaml(options);
-
-        List<Map<String, Object>> recipeMaps = new ArrayList<>();
-        for (Recipe recipe : release.getRecipes()) {
-            Map<String, Object> recipeMap = new LinkedHashMap<>();
-            recipeMap.put("version", quote(recipe.getVersion()));
-            recipeMap.put("description", quote(recipe.getDescription()));
-
-            Map<String, String> components = new LinkedHashMap<>();
-            if (recipe.getComponents() != null) {
-                recipe.getComponents().forEach((k, v) -> components.put(k, quote(v)));
-            }
-            recipeMap.put("components", components);
-
-            List<String> paths = new ArrayList<>();
-            if (recipe.getUpgradePaths() != null) {
-                recipe.getUpgradePaths().forEach(p -> paths.add(quote(p)));
-            }
-            recipeMap.put("upgradePaths", paths);
-            recipeMaps.add(recipeMap);
-        }
-
-        Map<String, Object> recipeData = new LinkedHashMap<>();
-        recipeData.put("chartVersion", quote(release.getVersion()));
-        recipeData.put("recipes", recipeMaps);
-
-        Map<String, Object> root = new LinkedHashMap<>();
-        root.put("recipeData", recipeData);
-
-        return yaml.dump(root);
-    }
-
-    private String quote(String val) {
-        // SnakeYAML will auto-quote strings that look like numbers
-        // We want explicit quoting for version strings
-        return val;
-    }
-
     private void updateChartVersion(File chartFile, String version) throws IOException {
         String content = Files.readString(chartFile.toPath());
         content = content.replaceAll("version:\\s*.+", "version: " + version);
         content = content.replaceAll("appVersion:\\s*.+", "appVersion: \"" + version + "\"");
-        writeFile(chartFile, content);
-    }
-
-    private void writeFile(File file, String content) throws IOException {
-        file.getParentFile().mkdirs();
-        try (FileWriter writer = new FileWriter(file)) {
-            writer.write(content);
-        }
+        Files.writeString(chartFile.toPath(), content);
+        log.info("Updated Chart.yaml to version {}", version);
     }
 
     private void deleteDirectory(File dir) {

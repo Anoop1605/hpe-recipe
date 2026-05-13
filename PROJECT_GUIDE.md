@@ -350,8 +350,12 @@ Each release gets its own set of resources, so multiple versions can run side-by
 
 **Terminal 1 — Backend:**
 ```bash
+cd backend # For Linux/macOS
+./run-backend.sh
+
+# For Windows
 cd backend
-GIT_TOKEN=ghp_yourToken mvn spring-boot:run
+run-backend.bat
 ```
 
 **Terminal 2 — Frontend:**

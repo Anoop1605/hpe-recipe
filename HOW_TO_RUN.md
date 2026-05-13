@@ -23,8 +23,11 @@ mvn clean package -DskipTests
 ### 2. Start the Backend (Terminal 1)
 
 ```bash
-cd backend
-mvn spring-boot:run
+# For Linux/macOS
+cd backend && ./run-backend.sh
+
+# For Windows
+cd backend && run-backend.bat
 ```
 
 Backend starts on **http://localhost:8082/api**

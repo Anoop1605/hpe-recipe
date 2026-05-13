@@ -1,0 +1,107 @@
+# ---------------- DEV CLUSTER (v0.0.192) ----------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recipe-v0-0-192-config
+  namespace: hpe-dev
+  labels:
+    app.kubernetes.io/name: recipe-detection
+data:
+  recipe-data.json: |
+    {
+      "chartVersion": "v0.0.192",
+      "recipes": [
+        {
+          "version": "1.6.0",
+          "description": "Bleeding edge Dev release",
+          "components": {
+            "Storage": "10.5.55.0",
+            "Server": "2026.01.00",
+            "Hypervisor": "8.0.13.1",
+            "Network": "103.2.5.6"
+          },
+          "upgradePaths": ["1.8.1"]
+        }
+      ]
+    }
+---
+# ---------------- QA CLUSTER (v0.0.181) ----------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recipe-v0-0-181-config
+  namespace: hpe-qa
+  labels:
+    app.kubernetes.io/name: recipe-detection
+data:
+  recipe-data.json: |
+    {
+      "chartVersion": "v0.0.181",
+      "recipes": [
+        {
+          "version": "1.5.0",
+          "description": "QA Testing release",
+          "components": {
+            "Storage": "10.5.0.1",
+            "Server": "2025.11.00",
+            "Hypervisor": "8.0.11.0",
+            "Network": "104.3.4.2"
+          },
+          "upgradePaths": ["1.6.0"]
+        }
+      ]
+    }
+---
+# ---------------- INTEGRATION CLUSTER (v0.0.172) ----------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recipe-v0-0-172-config
+  namespace: hpe-int
+  labels:
+    app.kubernetes.io/name: recipe-detection
+data:
+  recipe-data.json: |
+    {
+      "chartVersion": "v0.0.172",
+      "recipes": [
+        {
+          "version": "1.4.1",
+          "description": "Integration stable release",
+          "components": {
+            "Storage": "10.4.8.1",
+            "Server": "2025.09.00",
+            "Hypervisor": "8.0.9.1",
+            "Network": "103.2.5.6"
+          },
+          "upgradePaths": ["1.5.0"]
+        }
+      ]
+    }
+---
+# ---------------- PRODUCTION CLUSTER (v0.0.164) ----------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recipe-v0-0-164-config
+  namespace: hpe-prod
+  labels:
+    app.kubernetes.io/name: recipe-detection
+data:
+  recipe-data.json: |
+    {
+      "chartVersion": "v0.0.164",
+      "recipes": [
+        {
+          "version": "1.3.1",
+          "description": "Live Customer Production",
+          "components": {
+            "Storage": "10.3.0.0",
+            "Server": "2025.05.00",
+            "Hypervisor": "8.0.1.0",
+            "Network": "101.0.0.0"
+          },
+          "upgradePaths": ["1.4.1"]
+        }
+      ]
+    }
