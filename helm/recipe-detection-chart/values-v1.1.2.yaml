@@ -1,0 +1,21 @@
+recipeData:
+  chartVersion: 1.1.2
+  recipes:
+  - version: 1.1.0
+    description: Performance optimization release with upgraded analytics stack
+    components:
+      spark: 2.7.0
+      kafka: 2.7.1
+      airflow: 3.6.0
+      hbase: 3.5.0
+    upgradePaths: [
+      ]
+  - version: v1.2.0
+    description: Streaming and scalability enhancement release
+    components:
+      spark: 2.8.0
+      kafka: 2.8.0
+      airflow: 3.7.0
+      hbase: 3.5.1
+    upgradePaths:
+    - 1.1.0
