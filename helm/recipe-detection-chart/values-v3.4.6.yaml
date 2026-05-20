@@ -1,11 +1,6 @@
 recipeData:
   chartVersion: 3.4.6
-  catalog_name: HPE Analytics Runtime
-  catalog_description: Enterprise analytics and streaming platform catalog with AI-ready
-    processing and upgrade orchestration support
-  release_date: '2026-05-20'
-  catalog_status: GA
-  maintainer: HPE DevOps Team
+  catalog_status: Beta
   recipes:
   - version: 2.1.0
     description: Base analytics platform release
