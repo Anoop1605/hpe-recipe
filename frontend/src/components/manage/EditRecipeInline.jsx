@@ -7,12 +7,17 @@ import {
   btnSecondary,
   labelStyle,
 } from '../../ui/styles';
-import { normalizeRecipeDescription } from './utils';
+import { normalizeRecipeDescription, parseUpgradeList } from './utils';
 
 export default function EditRecipeInline({ recipe, allRecipes, onSave, onCancel }) {
   const [description, setDescription] = useState(recipe.description || '');
   const [components, setComponents] = useState(
-    Object.entries(recipe.components || {}).map(([name, version]) => ({ name, version }))
+    Object.entries(recipe.components || {}).map(([name, version]) => ({
+      name,
+      version,
+      upgradeFrom: recipe.componentUpgradeRules?.[name]?.from?.join(', ') || '',
+      upgradeTo: recipe.componentUpgradeRules?.[name]?.to?.join(', ') || '',
+    }))
   );
   const [upgradePaths, setUpgradePaths] = useState([...(recipe.upgradePaths || [])]);
 
@@ -22,7 +27,7 @@ export default function EditRecipeInline({ recipe, allRecipes, onSave, onCancel 
     setComponents(next);
   };
 
-  const addComponent = () => setComponents([...components, { name: '', version: '' }]);
+  const addComponent = () => setComponents([...components, { name: '', version: '', upgradeFrom: '', upgradeTo: '' }]);
   const removeComponent = (i) => setComponents(components.filter((_, j) => j !== i));
 
   const toggleUpgrade = (rv) => {
@@ -31,13 +36,23 @@ export default function EditRecipeInline({ recipe, allRecipes, onSave, onCancel 
 
   const handleSave = () => {
     const compMap = {};
+    const compRules = {};
     components.forEach((c) => {
-      if (c.name.trim() && c.version.trim()) compMap[c.name.trim()] = c.version.trim();
+      if (c.name.trim() && c.version.trim()) {
+        const compName = c.name.trim();
+        compMap[compName] = c.version.trim();
+        const fromList = parseUpgradeList(c.upgradeFrom);
+        const toList = parseUpgradeList(c.upgradeTo);
+        if (fromList.length > 0 || toList.length > 0) {
+          compRules[compName] = { from: fromList, to: toList };
+        }
+      }
     });
     onSave({
       description: normalizeRecipeDescription(description, recipe.version),
       components: compMap,
       upgradePaths,
+      componentUpgradeRules: compRules,
     });
   };
 
@@ -53,11 +68,20 @@ export default function EditRecipeInline({ recipe, allRecipes, onSave, onCancel 
       <label style={{ ...labelStyle, marginBottom: 8 }}>Components</label>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
         {components.map((c, i) => (
-          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div key={i} style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr 1fr 1fr auto',
+            gap: 8,
+            alignItems: 'center',
+          }}>
             <input style={{ ...inputStyle, flex: 1 }} value={c.name}
               onChange={(e) => updateComp(i, 'name', e.target.value)} placeholder="Component" />
             <input style={{ ...inputStyle, flex: 1 }} value={c.version}
               onChange={(e) => updateComp(i, 'version', e.target.value)} placeholder="Version" />
+            <input style={{ ...inputStyle, flex: 1 }} value={c.upgradeFrom || ''}
+              onChange={(e) => updateComp(i, 'upgradeFrom', e.target.value)} placeholder="Upgradeable from" />
+            <input style={{ ...inputStyle, flex: 1 }} value={c.upgradeTo || ''}
+              onChange={(e) => updateComp(i, 'upgradeTo', e.target.value)} placeholder="Upgradeable to" />
             <button type="button" onClick={() => removeComponent(i)} style={{ ...btnDanger, padding: '6px 10px' }}>×</button>
           </div>
         ))}

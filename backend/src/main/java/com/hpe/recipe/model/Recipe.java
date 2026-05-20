@@ -9,6 +9,7 @@ public class Recipe {
     private String description;
     private Map<String, String> components;
     private List<String> upgradePaths;
+    private Map<String, ComponentUpgradeRule> componentUpgradeRules;
 
     public Recipe() {}
 
@@ -17,6 +18,15 @@ public class Recipe {
         this.description = description;
         this.components = components;
         this.upgradePaths = upgradePaths;
+    }
+
+    public Recipe(String version, String description, Map<String, String> components, List<String> upgradePaths,
+                  Map<String, ComponentUpgradeRule> componentUpgradeRules) {
+        this.version = version;
+        this.description = description;
+        this.components = components;
+        this.upgradePaths = upgradePaths;
+        this.componentUpgradeRules = componentUpgradeRules;
     }
 
     public String getVersion() { return version; }
@@ -30,4 +40,9 @@ public class Recipe {
 
     public List<String> getUpgradePaths() { return upgradePaths; }
     public void setUpgradePaths(List<String> upgradePaths) { this.upgradePaths = upgradePaths; }
+
+    public Map<String, ComponentUpgradeRule> getComponentUpgradeRules() { return componentUpgradeRules; }
+    public void setComponentUpgradeRules(Map<String, ComponentUpgradeRule> componentUpgradeRules) {
+        this.componentUpgradeRules = componentUpgradeRules;
+    }
 }

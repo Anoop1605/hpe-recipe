@@ -4,6 +4,14 @@ function normalizeRecipeDescription(text, fallbackVersion) {
   return `HPE Ezmeral Runtime ${fallbackVersion}`;
 }
 
+function parseUpgradeList(text) {
+  return String(text || '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+
 function getEffectiveUpgradePaths(recipes, recipe, recipeIndex) {
   const explicit = Array.isArray(recipe.upgradePaths) ? recipe.upgradePaths.filter(Boolean) : [];
   if (explicit.length > 0) return explicit;
@@ -14,4 +22,8 @@ function getEffectiveUpgradePaths(recipes, recipe, recipeIndex) {
   return [];
 }
 
-export { normalizeRecipeDescription, getEffectiveUpgradePaths };
+export {
+  normalizeRecipeDescription,
+  parseUpgradeList,
+  getEffectiveUpgradePaths,
+};

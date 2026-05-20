@@ -2,6 +2,7 @@ package com.hpe.recipe.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hpe.recipe.model.ComponentUpgradeRule;
 import com.hpe.recipe.model.HelmRelease;
 import com.hpe.recipe.model.Recipe;
 import io.fabric8.kubernetes.api.model.ConfigMap;
@@ -85,6 +86,7 @@ public class HelmReleaseService {
                 r.setUpgradePaths(recipe.getUpgradePaths() == null
                         ? new ArrayList<>()
                         : new ArrayList<>(recipe.getUpgradePaths()));
+                r.setComponentUpgradeRules(copyComponentUpgradeRules(recipe.getComponentUpgradeRules()));
                 copiedRecipes.add(r);
             }
         }
@@ -148,11 +150,32 @@ public class HelmReleaseService {
                 List<String> upgradePaths = new ArrayList<>();
                 rNode.get("upgradePaths").forEach(p -> upgradePaths.add(p.asText()));
 
+                Map<String, ComponentUpgradeRule> componentUpgradeRules = new LinkedHashMap<>();
+                JsonNode rulesNode = rNode.get("componentUpgradeRules");
+                if (rulesNode != null && rulesNode.isObject()) {
+                    rulesNode.fields().forEachRemaining(entry -> {
+                        String compName = entry.getKey();
+                        JsonNode ruleNode = entry.getValue();
+                        List<String> from = new ArrayList<>();
+                        List<String> to = new ArrayList<>();
+                        JsonNode fromNode = ruleNode.get("from");
+                        if (fromNode != null && fromNode.isArray()) {
+                            fromNode.forEach(v -> from.add(v.asText()));
+                        }
+                        JsonNode toNode = ruleNode.get("to");
+                        if (toNode != null && toNode.isArray()) {
+                            toNode.forEach(v -> to.add(v.asText()));
+                        }
+                        componentUpgradeRules.put(compName, new ComponentUpgradeRule(from, to));
+                    });
+                }
+
                 recipes.add(new Recipe(
                         rNode.get("version").asText(),
                         rNode.has("description") ? rNode.get("description").asText() : "",
                         components,
-                        upgradePaths
+                        upgradePaths,
+                        componentUpgradeRules
                 ));
             }
 
@@ -508,6 +531,106 @@ public class HelmReleaseService {
         return recipe.getUpgradePaths() != null ? recipe.getUpgradePaths() : Collections.emptyList();
     }
 
+    private Map<String, ComponentUpgradeRule> safeComponentUpgradeRules(Recipe recipe) {
+        return recipe.getComponentUpgradeRules() != null ? recipe.getComponentUpgradeRules() : Collections.emptyMap();
+    }
+
+    private Map<String, ComponentUpgradeRule> copyComponentUpgradeRules(
+            Map<String, ComponentUpgradeRule> rules) {
+        if (rules == null) return new LinkedHashMap<>();
+        Map<String, ComponentUpgradeRule> copy = new LinkedHashMap<>();
+        for (Map.Entry<String, ComponentUpgradeRule> entry : rules.entrySet()) {
+            ComponentUpgradeRule rule = entry.getValue();
+            if (rule == null) continue;
+            copy.put(entry.getKey(), new ComponentUpgradeRule(rule.getFrom(), rule.getTo()));
+        }
+        return copy;
+    }
+
+    public Optional<String> validateComponentUpgradeCompatibility(HelmRelease release) {
+        if (release == null || release.getRecipes() == null) return Optional.empty();
+
+        List<Recipe> recipes = release.getRecipes();
+        Map<String, Recipe> recipesByVersion = recipes.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(Recipe::getVersion, r -> r, (a, b) -> a, LinkedHashMap::new));
+
+        Map<String, Map<String, ComponentUpgradeRule>> rulesByComponentVersion = new LinkedHashMap<>();
+
+        for (Recipe recipe : recipes) {
+            Map<String, String> components = safeComponents(recipe);
+            Map<String, ComponentUpgradeRule> rules = safeComponentUpgradeRules(recipe);
+            for (Map.Entry<String, String> entry : components.entrySet()) {
+                String compName = entry.getKey();
+                String compVersion = entry.getValue();
+                ComponentUpgradeRule rule = rules.get(compName);
+                if (rule == null) continue;
+                Map<String, ComponentUpgradeRule> byVersion =
+                        rulesByComponentVersion.computeIfAbsent(compName, k -> new LinkedHashMap<>());
+                ComponentUpgradeRule existing = byVersion.get(compVersion);
+                if (existing != null && !componentRuleEquals(existing, rule)) {
+                    return Optional.of(
+                            "Conflicting upgrade rules for component " + compName + " version " + compVersion);
+                }
+                byVersion.put(compVersion, new ComponentUpgradeRule(rule.getFrom(), rule.getTo()));
+            }
+        }
+
+        for (Recipe target : recipes) {
+            List<String> fromVersions = safeUpgradePaths(target);
+            if (fromVersions.isEmpty()) continue;
+
+            for (String fromVersion : fromVersions) {
+                Recipe source = recipesByVersion.get(fromVersion);
+                if (source == null) {
+                    return Optional.of("Upgrade path references missing recipe version " + fromVersion);
+                }
+
+                Map<String, String> targetComponents = safeComponents(target);
+                Map<String, String> sourceComponents = safeComponents(source);
+
+                for (Map.Entry<String, String> compEntry : targetComponents.entrySet()) {
+                    String compName = compEntry.getKey();
+                    String targetVersion = compEntry.getValue();
+                    String sourceVersion = sourceComponents.get(compName);
+                    if (sourceVersion == null || targetVersion == null) continue;
+
+                    ComponentUpgradeRule targetRule = rulesByComponentVersion
+                            .getOrDefault(compName, Collections.emptyMap())
+                            .get(targetVersion);
+                    ComponentUpgradeRule sourceRule = rulesByComponentVersion
+                            .getOrDefault(compName, Collections.emptyMap())
+                            .get(sourceVersion);
+
+                    if (targetRule != null && !isAllowed(targetRule.getFrom(), sourceVersion)) {
+                        return Optional.of("Component " + compName + " version " + targetVersion
+                                + " cannot upgrade from " + sourceVersion);
+                    }
+                    if (sourceRule != null && !isAllowed(sourceRule.getTo(), targetVersion)) {
+                        return Optional.of("Component " + compName + " version " + sourceVersion
+                                + " cannot upgrade to " + targetVersion);
+                    }
+                }
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    private boolean isAllowed(List<String> allowed, String version) {
+        if (allowed == null || allowed.isEmpty()) return true;
+        return allowed.contains(version);
+    }
+
+    private boolean componentRuleEquals(ComponentUpgradeRule a, ComponentUpgradeRule b) {
+        List<String> fromA = a.getFrom() != null ? a.getFrom() : Collections.emptyList();
+        List<String> fromB = b.getFrom() != null ? b.getFrom() : Collections.emptyList();
+        List<String> toA = a.getTo() != null ? a.getTo() : Collections.emptyList();
+        List<String> toB = b.getTo() != null ? b.getTo() : Collections.emptyList();
+        return new LinkedHashSet<>(fromA).equals(new LinkedHashSet<>(fromB))
+                && new LinkedHashSet<>(toA).equals(new LinkedHashSet<>(toB));
+    }
+
     // ================= INTERNAL =================
 
     private void updateConfigMap(String cluster, String version, HelmRelease release) {
@@ -553,6 +676,17 @@ public class HelmReleaseService {
                 map.put("description", r.getDescription());
                 map.put("components", r.getComponents());
                 map.put("upgradePaths", r.getUpgradePaths());
+                if (r.getComponentUpgradeRules() != null && !r.getComponentUpgradeRules().isEmpty()) {
+                    Map<String, Map<String, List<String>>> rules = new LinkedHashMap<>();
+                    for (Map.Entry<String, ComponentUpgradeRule> entry : r.getComponentUpgradeRules().entrySet()) {
+                        ComponentUpgradeRule rule = entry.getValue();
+                        Map<String, List<String>> ruleMap = new LinkedHashMap<>();
+                        ruleMap.put("from", rule.getFrom() != null ? rule.getFrom() : Collections.emptyList());
+                        ruleMap.put("to", rule.getTo() != null ? rule.getTo() : Collections.emptyList());
+                        rules.put(entry.getKey(), ruleMap);
+                    }
+                    map.put("componentUpgradeRules", rules);
+                }
 
                 recipes.add(map);
             }

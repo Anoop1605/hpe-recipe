@@ -55,8 +55,12 @@ export default function ReleaseCard({ release, onDeploy, cluster, onRefresh, onN
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
     })
-      .then((r) => {
-        if (!r.ok) throw new Error('Failed to update');
+      .then(async (r) => {
+        if (!r.ok) {
+          let payload = {};
+          try { payload = await r.json(); } catch { payload = {}; }
+          throw new Error(payload.error || 'Failed to update');
+        }
         return r.json();
       })
       .then(() => {

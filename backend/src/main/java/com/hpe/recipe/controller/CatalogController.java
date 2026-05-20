@@ -20,12 +20,14 @@ public class CatalogController {
     }
 
     @GetMapping
-    public List<Catalog> getAllCatalogs() {
-        return catalogService.getAllCatalogs();
+    public List<Catalog> getAllCatalogs(@RequestParam String cluster) {
+        return catalogService.getAllCatalogs(cluster);
     }
 
     @GetMapping("/{catalogVersion}/recipes")
-    public List<Recipe> getRecipes(@PathVariable String catalogVersion) {
-        return catalogService.getRecipesByCatalog(catalogVersion);
+    public List<Recipe> getRecipes(
+            @PathVariable String catalogVersion,
+            @RequestParam String cluster) {
+        return catalogService.getRecipesByCatalog(cluster, catalogVersion);
     }
 }

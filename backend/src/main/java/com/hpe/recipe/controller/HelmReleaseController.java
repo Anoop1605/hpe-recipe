@@ -86,7 +86,6 @@ public class HelmReleaseController {
     public ResponseEntity<HelmRelease> createHelmRelease(
             @RequestParam String cluster,
             @RequestBody HelmRelease release) {
-
         HelmRelease created = helmReleaseService.createHelmRelease(cluster, release);
 
         if (created == null) {
@@ -106,7 +105,6 @@ public class HelmReleaseController {
             @PathVariable String version,
             @RequestParam String cluster,
             @RequestBody HelmRelease release) {
-
         HelmRelease updated = helmReleaseService.updateHelmRelease(cluster, version, release);
 
         if (updated == null) return ResponseEntity.notFound().build();
@@ -224,7 +222,6 @@ public class HelmReleaseController {
             @PathVariable String version,
             @RequestParam String cluster,
             @RequestBody Recipe recipe) {
-
         Recipe added = helmReleaseService.addRecipeToRelease(cluster, version, recipe);
 
         if (added == null) return ResponseEntity.status(HttpStatus.CONFLICT).build();
@@ -241,7 +238,6 @@ public class HelmReleaseController {
             @PathVariable String recipeVersion,
             @RequestParam String cluster,
             @RequestBody Recipe recipe) {
-
         Recipe updated = helmReleaseService.updateRecipeInRelease(cluster, version, recipeVersion, recipe);
 
         if (updated == null) return ResponseEntity.notFound().build();

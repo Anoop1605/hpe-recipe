@@ -8,7 +8,7 @@ import {
   cardStyle,
   labelStyle,
 } from '../../ui/styles';
-import { normalizeRecipeDescription } from './utils';
+import { normalizeRecipeDescription, parseUpgradeList } from './utils';
 
 const API_BASE = '/api';
 
@@ -18,16 +18,20 @@ export default function CreateReleaseForm({ cluster, onCreated }) {
   const [draftRecipes, setDraftRecipes] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [expandedRecipeIds, setExpandedRecipeIds] = useState([]);
+  const [availableReleases, setAvailableReleases] = useState([]);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importReleaseVersion, setImportReleaseVersion] = useState('');
+  const [importRecipes, setImportRecipes] = useState([]);
+  const [importRecipeVersion, setImportRecipeVersion] = useState('');
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState(null);
 
   const createEmptyRecipe = () => ({
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     version: '',
     description: '',
     components: [
-      { name: 'spark', version: '' },
-      { name: 'kafka', version: '' },
-      { name: 'airflow', version: '' },
-      { name: 'hbase', version: '' },
+      { name: '', version: '', upgradeFrom: '', upgradeTo: '' },
     ],
     upgradePaths: [],
   });
@@ -38,15 +42,79 @@ export default function CreateReleaseForm({ cluster, onCreated }) {
     : '';
 
   useEffect(() => {
-    if (draftRecipes.length === 0) {
-      setDraftRecipes([createEmptyRecipe()]);
+    setImportError(null);
+    setImportReleaseVersion('');
+    setImportRecipeVersion('');
+    setImportRecipes([]);
+    fetch(`${API_BASE}/helm-releases?cluster=${cluster}`)
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then((data) => setAvailableReleases(Array.isArray(data) ? data : []))
+      .catch(() => setAvailableReleases([]));
+  }, [cluster]);
+
+  useEffect(() => {
+    if (!importReleaseVersion) {
+      setImportRecipes([]);
+      return;
     }
-  }, [draftRecipes.length]);
+    setImportLoading(true);
+    setImportError(null);
+    setImportRecipeVersion('');
+    fetch(`${API_BASE}/helm-releases/${importReleaseVersion}?cluster=${cluster}`)
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then((data) => setImportRecipes(Array.isArray(data?.recipes) ? data.recipes : []))
+      .catch(() => {
+        setImportError('Failed to load recipes for the selected release');
+        setImportRecipes([]);
+      })
+      .finally(() => setImportLoading(false));
+  }, [importReleaseVersion, cluster]);
 
   const addRecipeDraft = () => {
     const recipe = createEmptyRecipe();
     setDraftRecipes((prev) => [...prev, recipe]);
     setExpandedRecipeIds((prev) => [...prev, recipe.id]);
+  };
+
+  const importRecipeDraft = () => {
+    if (!importReleaseVersion || !importRecipeVersion) {
+      setImportError('Select a release and recipe to import');
+      return;
+    }
+
+    const recipe = importRecipes.find((r) => r.version === importRecipeVersion);
+    if (!recipe) {
+      setImportError('Selected recipe not found');
+      return;
+    }
+
+    const exists = draftRecipes.some((r) => r.version.trim() === recipe.version);
+    if (exists) {
+      setImportError(`Recipe version ${recipe.version} already exists in this release`);
+      return;
+    }
+
+    const compRules = recipe.componentUpgradeRules || {};
+    const components = Object.entries(recipe.components || {}).map(([name, ver]) => ({
+      name,
+      version: ver,
+      upgradeFrom: (compRules[name]?.from || []).join(', '),
+      upgradeTo: (compRules[name]?.to || []).join(', '),
+    }));
+
+    const imported = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      version: recipe.version || '',
+      description: recipe.description || '',
+      components: components.length > 0 ? components : [
+        { name: '', version: '', upgradeFrom: '', upgradeTo: '' },
+      ],
+      upgradePaths: Array.isArray(recipe.upgradePaths) ? [...recipe.upgradePaths] : [],
+    };
+
+    setDraftRecipes((prev) => [...prev, imported]);
+    setExpandedRecipeIds((prev) => [...prev, imported.id]);
+    setImportError(null);
   };
 
   const removeRecipeDraft = (id) => {
@@ -75,7 +143,9 @@ export default function CreateReleaseForm({ cluster, onCreated }) {
 
   const addDraftComponent = (recipeId) => {
     setDraftRecipes((prev) => prev.map((r) => (
-      r.id === recipeId ? { ...r, components: [...r.components, { name: '', version: '' }] } : r
+      r.id === recipeId
+        ? { ...r, components: [...r.components, { name: '', version: '', upgradeFrom: '', upgradeTo: '' }] }
+        : r
     )));
   };
 
@@ -119,9 +189,16 @@ export default function CreateReleaseForm({ cluster, onCreated }) {
     for (let idx = 0; idx < typedDrafts.length; idx += 1) {
       const recipe = typedDrafts[idx];
       const compMap = {};
+      const compRules = {};
       recipe.components.forEach((c) => {
         if (c.name.trim() && c.version.trim()) {
-          compMap[c.name.trim()] = c.version.trim();
+          const compName = c.name.trim();
+          compMap[compName] = c.version.trim();
+          const fromList = parseUpgradeList(c.upgradeFrom);
+          const toList = parseUpgradeList(c.upgradeTo);
+          if (fromList.length > 0 || toList.length > 0) {
+            compRules[compName] = { from: fromList, to: toList };
+          }
         }
       });
 
@@ -140,6 +217,7 @@ export default function CreateReleaseForm({ cluster, onCreated }) {
         description: normalizeRecipeDescription(recipe.description, recipe.version.trim()),
         components: compMap,
         upgradePaths: validUpgradePaths,
+        componentUpgradeRules: compRules,
       });
     }
 
@@ -154,9 +232,13 @@ export default function CreateReleaseForm({ cluster, onCreated }) {
         recipes: recipesPayload,
       }),
     })
-      .then((r) => {
+      .then(async (r) => {
         if (r.status === 409) throw new Error('Version already exists');
-        if (!r.ok) throw new Error('Failed to create');
+        if (!r.ok) {
+          let payload = {};
+          try { payload = await r.json(); } catch { payload = {}; }
+          throw new Error(payload.error || 'Failed to create');
+        }
         return r.json();
       })
       .then(() => {
@@ -212,14 +294,84 @@ export default function CreateReleaseForm({ cluster, onCreated }) {
             <div style={{ fontSize: 13, fontWeight: 700, color: T.blue }}>
                   Recipes
             </div>
-            <button type="button" onClick={addRecipeDraft} style={{ ...btnSecondary, fontSize: 11, padding: '6px 12px' }}>
-              + Add Recipe
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button type="button" onClick={addRecipeDraft} style={{ ...btnSecondary, fontSize: 11, padding: '6px 12px' }}>
+                + Create New Recipe
+              </button>
+              <button type="button" onClick={() => setImportOpen((prev) => !prev)} style={{ ...btnSecondary, fontSize: 11, padding: '6px 12px' }}>
+                + Import Existing Recipe
+              </button>
+            </div>
           </div>
 
           <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 12 }}>
                 Add at least one recipe version with components. Upgrade paths are optional.
           </div>
+
+          {importOpen && (
+            <div style={{
+              border: `1px solid ${T.border}`,
+              background: T.bgCard,
+              borderRadius: 10,
+              padding: 12,
+              marginBottom: 12,
+            }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: 10, alignItems: 'end' }}>
+                <div>
+                  <label style={labelStyle}>Source Helm Release</label>
+                  <select
+                    style={inputStyle}
+                    value={importReleaseVersion}
+                    onChange={(e) => setImportReleaseVersion(e.target.value)}
+                  >
+                    <option value="">Select release</option>
+                    {availableReleases
+                      .filter((r) => r.version !== version.trim())
+                      .map((r) => (
+                        <option key={r.version} value={r.version}>v{r.version}</option>
+                      ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Recipe</label>
+                  <select
+                    style={inputStyle}
+                    value={importRecipeVersion}
+                    onChange={(e) => setImportRecipeVersion(e.target.value)}
+                    disabled={!importReleaseVersion || importLoading}
+                  >
+                    <option value="">
+                      {importLoading ? 'Loading recipes...' : 'Select recipe'}
+                    </option>
+                    {importRecipes.map((r) => (
+                      <option key={r.version} value={r.version}>v{r.version}</option>
+                    ))}
+                  </select>
+                </div>
+                <button type="button" onClick={importRecipeDraft} style={{
+                  ...btnSecondary, fontSize: 11, padding: '6px 12px', height: 34,
+                }}>
+                  Import
+                </button>
+                <button type="button" onClick={() => {
+                  setImportOpen(false);
+                  setImportError(null);
+                  setImportReleaseVersion('');
+                  setImportRecipeVersion('');
+                  setImportRecipes([]);
+                }} style={{
+                  ...btnSecondary, fontSize: 11, padding: '6px 12px', height: 34,
+                }}>
+                  Remove
+                </button>
+              </div>
+              {importError && (
+                <div style={{ marginTop: 8, fontSize: 12, color: T.red }}>
+                  {importError}
+                </div>
+              )}
+            </div>
+          )}
 
               {draftRecipes.length === 0 && (
                 <div style={{
@@ -231,7 +383,7 @@ export default function CreateReleaseForm({ cluster, onCreated }) {
                   background: T.bgCard,
                   marginBottom: 8,
                 }}>
-                  No recipes added yet. Click + Add Recipe.
+                  No recipes added yet. Click + Create New Recipe.
                 </div>
               )}
 
@@ -265,7 +417,7 @@ export default function CreateReleaseForm({ cluster, onCreated }) {
                         }}
                       >
                         <span>{isExpanded ? '▾' : '▸'}</span>
-                        <span>{recipe.version.trim() ? `Recipe v${recipe.version.trim()}` : `Recipe #${recipeIndex + 1}`}</span>
+                        <span>{recipe.version.trim() ? `Recipe v${recipe.version.trim()}` : 'New Recipe'}</span>
                       </button>
                       <button type="button" onClick={() => removeRecipeDraft(recipe.id)} style={{ ...btnDanger, fontSize: 11, padding: '4px 10px' }}>
                         Remove
@@ -296,20 +448,37 @@ export default function CreateReleaseForm({ cluster, onCreated }) {
                 </div>
 
                 <label style={{ ...labelStyle, marginBottom: 8 }}>Components</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10 }}>
                   {recipe.components.map((c, i) => (
-                    <div key={`${recipe.id}-${i}`} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <div key={`${recipe.id}-${i}`} style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr 1fr 1.3fr auto',
+                      gap: 12,
+                      alignItems: 'center',
+                    }}>
                       <input
-                        style={{ ...inputStyle, flex: 1 }}
-                        placeholder="Component name"
+                        style={inputStyle}
+                        placeholder="Enter Component"
                         value={c.name}
                         onChange={(e) => updateDraftComponent(recipe.id, i, 'name', e.target.value)}
                       />
                       <input
-                        style={{ ...inputStyle, flex: 1 }}
+                        style={inputStyle}
                         placeholder="Version"
                         value={c.version}
                         onChange={(e) => updateDraftComponent(recipe.id, i, 'version', e.target.value)}
+                      />
+                      <input
+                        style={inputStyle}
+                        placeholder="Upgrade From"
+                        value={c.upgradeFrom || ''}
+                        onChange={(e) => updateDraftComponent(recipe.id, i, 'upgradeFrom', e.target.value)}
+                      />
+                      <input
+                        style={inputStyle}
+                        placeholder="Upgrade To"
+                        value={c.upgradeTo || ''}
+                        onChange={(e) => updateDraftComponent(recipe.id, i, 'upgradeTo', e.target.value)}
                       />
                       {recipe.components.length > 1 && (
                         <button
@@ -322,7 +491,11 @@ export default function CreateReleaseForm({ cluster, onCreated }) {
                       )}
                     </div>
                   ))}
-                  <button type="button" onClick={() => addDraftComponent(recipe.id)} style={{ ...btnSecondary, alignSelf: 'flex-start', fontSize: 11, padding: '6px 12px' }}>
+                  <button
+                    type="button"
+                    onClick={() => addDraftComponent(recipe.id)}
+                    style={{ ...btnSecondary, alignSelf: 'flex-start', fontSize: 11, padding: '6px 12px', marginTop: 10 }}
+                  >
                     + Add Component
                   </button>
                 </div>
