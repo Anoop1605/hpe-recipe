@@ -16,5 +16,10 @@ recipeData:
         upgrade_to:
         - 4.7.2
         - 4.5.6
+      dhoni:
+        version: 3.6.2
+        upgrade_from: []
+        upgrade_to:
+        - 4.7.2
     upgradePaths: [
       ]
