@@ -1,7 +1,7 @@
 recipeData:
   chartVersion: 0.0.8
   recipes:
-  - version: null
+  - version: 'null'
     description: Test1
     components:
       Kafka:
@@ -26,7 +26,7 @@ recipeData:
         - 4.8.0
     upgradePaths: [
       ]
-  - version: 1.8.0
+  - version: null
     description: Test2
     components:
       Kafka:
@@ -35,6 +35,7 @@ recipeData:
         - 2.7.0
         upgrade_to:
         - 2.9.0
+        - 3.0.0
       mysql:
         version: 3.8.0
         upgrade_from:
@@ -49,3 +50,4 @@ recipeData:
         - 4.9.0
     upgradePaths:
     - 1.7.9
+    - 'null'
