@@ -8,8 +8,8 @@ recipeData:
         version: 3.6.0
         upgrade_from:
         - 3.5.0
-        upgrade_to: [
-          ]
+        upgrade_to:
+        - 3.7.0
       hbase:
         version: 3.5.0
         upgrade_from: [
