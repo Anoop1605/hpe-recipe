@@ -1,0 +1,12 @@
+recipeData:
+  chartVersion: 0.9.12
+  catalog_name: Test Catalog
+  catalog_description: A catalog for testing
+  recipes:
+  - version: 1.0.0
+    description: Test Recipe
+    components:
+      spark:
+        version: 3.5.0
+        upgrade_from: []
+        upgrade_to: []
