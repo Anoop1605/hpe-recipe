@@ -48,3 +48,4 @@ helm/**/*.tgz
 #custom 
 README_GITHUB_SETUP.md
 SETUP.md
+backend/src/main/resources/application-local.yml
