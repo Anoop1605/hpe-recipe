@@ -13,3 +13,7 @@ This repository contains the complete, production-ready project scaffold for the
 
 ## Quick Start
 Refer to `QUICKSTART.md` for a 5-minute guide to get the environment running locally using Minikube and Helm.
+
+## Kubernetes cluster mapping
+The backend reads Kubernetes cluster mappings from `backend/src/main/resources/application.yml`.
+Each logical cluster name in the UI maps to a kubeconfig context and namespace, so you can point `dev`, `prod`, `qa`, and `integration` at different Kubernetes clusters without changing code.

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import useRealtimeReleases from './hooks/useRealtimeReleases';
+import useClusterOptions from './hooks/useClusterOptions';
 import T from './theme';
 import { btnSecondary, cardStyle } from './ui/styles';
 import Toast from './components/manage/Toast';
@@ -14,31 +15,35 @@ const API_BASE = '/api';
 // ============================================================================
 export default function ManagePage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const allowedClusters = ['dev', 'prod', 'qa', 'integration'];
-  const initialCluster = allowedClusters.includes(searchParams.get('cluster'))
+  const { clusters: configuredClusters } = useClusterOptions();
+  const clusterNames = configuredClusters.length > 0
+    ? configuredClusters.map((cluster) => cluster.name).filter(Boolean)
+    : ['dev', 'prod', 'qa', 'integration'];
+  const defaultCluster = clusterNames[0] || 'dev';
+  const initialCluster = clusterNames.includes(searchParams.get('cluster'))
     ? searchParams.get('cluster')
-    : 'dev';
+    : defaultCluster;
   const [cluster, setCluster] = useState(initialCluster);
   const { helmReleases: releases, loading, error, lastEvent, refetch } = useRealtimeReleases(cluster);
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
-    const urlCluster = allowedClusters.includes(searchParams.get('cluster'))
+    const urlCluster = clusterNames.includes(searchParams.get('cluster'))
       ? searchParams.get('cluster')
-      : 'dev';
+      : defaultCluster;
     setCluster((prev) => (prev === urlCluster ? prev : urlCluster));
-  }, [searchParams]);
+  }, [searchParams, clusterNames, defaultCluster]);
 
   useEffect(() => {
-    const urlCluster = allowedClusters.includes(searchParams.get('cluster'))
+    const urlCluster = clusterNames.includes(searchParams.get('cluster'))
       ? searchParams.get('cluster')
-      : 'dev';
+      : defaultCluster;
     if (urlCluster !== cluster) {
       const next = new URLSearchParams(searchParams);
       next.set('cluster', cluster);
       setSearchParams(next, { replace: true });
     }
-  }, [cluster, searchParams, setSearchParams, allowedClusters]);
+  }, [cluster, searchParams, setSearchParams, clusterNames, defaultCluster]);
 
   // Show toast on realtime events from other users/Jenkins
   useEffect(() => {
@@ -120,10 +125,9 @@ export default function ManagePage() {
             ...btnSecondary,
             padding: '7px 10px',
           }}>
-            <option value="dev">DEV</option>
-            <option value="prod">PROD</option>
-            <option value="qa">QA</option>
-            <option value="integration">INTEGRATION</option>
+            {clusterNames.map((name) => (
+              <option key={name} value={name}>{name.toUpperCase()}</option>
+            ))}
           </select>
           <span style={{ display: 'flex', alignItems: 'center', fontSize: 12, color: T.textMuted, whiteSpace: 'nowrap' }}>
             Cluster: {cluster.toUpperCase()}

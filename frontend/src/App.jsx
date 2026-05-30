@@ -17,6 +17,7 @@ import VersionTimeline from "./components/visualizer/VersionTimeline";
 import DetailPanel from "./components/visualizer/DetailPanel";
 import CompareView from "./components/visualizer/CompareView";
 import StatsBar from "./components/visualizer/StatsBar";
+import useClusterOptions from "./hooks/useClusterOptions";
 
 const API_BASE = "/api";
 
@@ -28,10 +29,14 @@ const nodeTypes = { recipe: RecipeNode, component: ComponentNode };
 export default function App() {
   const [searchParams, setSearchParams] = useSearchParams();
   const versionParam = searchParams.get("version");
-  const allowedClusters = ["dev", "prod", "qa", "integration"];
-  const initialCluster = allowedClusters.includes(searchParams.get("cluster"))
+  const { clusters: configuredClusters } = useClusterOptions();
+  const clusterNames = configuredClusters.length > 0
+    ? configuredClusters.map((cluster) => cluster.name).filter(Boolean)
+    : ["dev", "prod", "qa", "integration"];
+  const defaultCluster = clusterNames[0] || "dev";
+  const initialCluster = clusterNames.includes(searchParams.get("cluster"))
     ? searchParams.get("cluster")
-    : "dev";
+    : defaultCluster;
   const [cluster, setCluster] = useState(initialCluster);
   const {
     helmReleases,
@@ -50,22 +55,22 @@ export default function App() {
   const loading = releasesLoading || detailLoading;
 
   useEffect(() => {
-    const urlCluster = allowedClusters.includes(searchParams.get("cluster"))
+    const urlCluster = clusterNames.includes(searchParams.get("cluster"))
       ? searchParams.get("cluster")
-      : "dev";
+      : defaultCluster;
     setCluster((prev) => (prev === urlCluster ? prev : urlCluster));
-  }, [searchParams]);
+  }, [searchParams, clusterNames, defaultCluster]);
 
   useEffect(() => {
-    const urlCluster = allowedClusters.includes(searchParams.get("cluster"))
+    const urlCluster = clusterNames.includes(searchParams.get("cluster"))
       ? searchParams.get("cluster")
-      : "dev";
+      : defaultCluster;
     if (urlCluster !== cluster) {
       const next = new URLSearchParams(searchParams);
       next.set("cluster", cluster);
       setSearchParams(next, { replace: true });
     }
-  }, [cluster, searchParams, setSearchParams, allowedClusters]);
+  }, [cluster, searchParams, setSearchParams, clusterNames, defaultCluster]);
 
   useEffect(() => {
     if (versionParam && helmReleases.some((r) => r.version === versionParam)) {
@@ -237,10 +242,11 @@ export default function App() {
               cursor: "pointer",
             }}
           >
-            <option value="dev">DEV</option>
-            <option value="prod">PROD</option>
-            <option value="qa">QA</option>
-            <option value="integration">INTEGRATION</option>
+            {clusterNames.map((name) => (
+              <option key={name} value={name}>
+                {name.toUpperCase()}
+              </option>
+            ))}
           </select>
           <span
             style={{

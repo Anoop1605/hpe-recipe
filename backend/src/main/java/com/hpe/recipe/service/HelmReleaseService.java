@@ -2,6 +2,7 @@ package com.hpe.recipe.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hpe.recipe.config.KubernetesProperties;
 import com.hpe.recipe.model.ComponentSpec;
 import com.hpe.recipe.model.HelmRelease;
 import com.hpe.recipe.model.Recipe;
@@ -11,6 +12,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,11 +30,13 @@ public class HelmReleaseService {
     private static final String RECIPE_DATA_KEY = "recipe-data.json";
 
     private final Map<String, KubernetesClient> clients;
+    private final KubernetesProperties kubernetesProperties;
     private final Map<String, Map<String, HelmRelease>> draftReleasesByCluster = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public HelmReleaseService(Map<String, KubernetesClient> clients) {
+    public HelmReleaseService(Map<String, KubernetesClient> clients, KubernetesProperties kubernetesProperties) {
         this.clients = clients;
+        this.kubernetesProperties = kubernetesProperties;
     }
 
     // ================= CLIENT =================
@@ -47,10 +51,23 @@ public class HelmReleaseService {
 
     private List<ConfigMap> fetchRecipeConfigMaps(String cluster) {
         return getClient(cluster).configMaps()
-                .inNamespace("default")
+                .inNamespace(resolveNamespace(cluster))
                 .withLabel(LABEL_APP_NAME, "recipe-detection")
                 .list()
                 .getItems();
+    }
+
+    private String resolveNamespace(String cluster) {
+        if (kubernetesProperties == null || kubernetesProperties.getClusters() == null) {
+            return "default";
+        }
+
+        KubernetesProperties.Cluster clusterConfig = kubernetesProperties.getClusters().get(cluster);
+        if (clusterConfig == null || !StringUtils.hasText(clusterConfig.getNamespace())) {
+            return "default";
+        }
+
+        return clusterConfig.getNamespace();
     }
 
     private boolean isHelmManaged(ConfigMap cm) {
@@ -91,7 +108,7 @@ public class HelmReleaseService {
                 r.setComponents(copyComponents(recipe.getComponents()));
                 r.setUpgradeTo(recipe.getUpgradeTo() == null
                         ? new ArrayList<>()
-                    : new ArrayList<>(recipe.getUpgradeTo()));
+                        : new ArrayList<>(recipe.getUpgradeTo()));
                 copiedRecipes.add(r);
             }
         }
@@ -136,7 +153,8 @@ public class HelmReleaseService {
     private HelmRelease parseConfigMap(String cluster, ConfigMap cm) {
         try {
             String json = cm.getData().get(RECIPE_DATA_KEY);
-            if (json == null || json.isBlank()) return null;
+            if (json == null || json.isBlank())
+                return null;
 
             JsonNode root = objectMapper.readTree(json);
             String version = root.get("chartVersion").asText();
@@ -202,14 +220,13 @@ public class HelmReleaseService {
                 }
 
                 recipes.add(new Recipe(
-                    versionValue,
-                    rNode.has("description") ? rNode.get("description").asText() : "",
-                    rNode.has("release_date") ? rNode.get("release_date").asText() : "",
-                    rNode.has("status") ? rNode.get("status").asText() : "",
-                    rNode.has("release_notes") ? rNode.get("release_notes").asText() : "",
-                    components,
-                    upgradeTo
-                ));
+                        versionValue,
+                        rNode.has("description") ? rNode.get("description").asText() : "",
+                        rNode.has("release_date") ? rNode.get("release_date").asText() : "",
+                        rNode.has("status") ? rNode.get("status").asText() : "",
+                        rNode.has("release_notes") ? rNode.get("release_notes").asText() : "",
+                        components,
+                        upgradeTo));
             }
 
             if (!hasExplicitUpgradeTo && !legacyFromByTarget.isEmpty()) {
@@ -220,7 +237,8 @@ public class HelmReleaseService {
                     String targetVersion = entry.getKey();
                     for (String fromVersion : entry.getValue()) {
                         Recipe source = byVersion.get(fromVersion);
-                        if (source == null) continue;
+                        if (source == null)
+                            continue;
                         List<String> upgradeTo = source.getUpgradeTo();
                         if (upgradeTo == null) {
                             upgradeTo = new ArrayList<>();
@@ -233,7 +251,7 @@ public class HelmReleaseService {
                 }
             }
 
-                return new HelmRelease(
+            return new HelmRelease(
                     version,
                     releaseName,
                     status,
@@ -258,7 +276,8 @@ public class HelmReleaseService {
         List<ConfigMap> cms = fetchRecipeConfigMaps(cluster);
 
         // One release per chart version in API responses.
-        // If both draft and Helm configmaps exist, prefer draft (pending/deploying state).
+        // If both draft and Helm configmaps exist, prefer draft (pending/deploying
+        // state).
         Map<String, ConfigMap> selectedByVersion = new LinkedHashMap<>();
         for (ConfigMap cm : cms) {
             HelmRelease parsed = parseConfigMap(cluster, cm);
@@ -284,8 +303,7 @@ public class HelmReleaseService {
                         HelmRelease::getVersion,
                         this::copyRelease,
                         (a, b) -> a,
-                        LinkedHashMap::new
-                ));
+                        LinkedHashMap::new));
 
         draftsForCluster(cluster).forEach((version, draft) -> merged.put(version, copyRelease(draft)));
 
@@ -309,7 +327,8 @@ public class HelmReleaseService {
 
     public HelmRelease createHelmRelease(String cluster, HelmRelease release) {
 
-        if (getHelmRelease(cluster, release.getVersion()) != null) return null;
+        if (getHelmRelease(cluster, release.getVersion()) != null)
+            return null;
 
         if (release.getStatus() == null || release.getStatus().isBlank()) {
             release.setStatus("pending");
@@ -320,7 +339,8 @@ public class HelmReleaseService {
     }
 
     public HelmRelease updateHelmRelease(String cluster, String version, HelmRelease release) {
-        if (getHelmRelease(cluster, version) == null) return null;
+        if (getHelmRelease(cluster, version) == null)
+            return null;
 
         release.setVersion(version);
         storeDraft(cluster, release);
@@ -341,7 +361,7 @@ public class HelmReleaseService {
             if (r != null && r.getVersion().equals(version)) {
 
                 List<StatusDetails> result = getClient(cluster).configMaps()
-                        .inNamespace("default")
+                        .inNamespace(resolveNamespace(cluster))
                         .withName(cm.getMetadata().getName())
                         .delete();
 
@@ -374,7 +394,7 @@ public class HelmReleaseService {
                     && version.equals(parsed.getVersion())
                     && !isHelmManaged(cm)) {
                 getClient(cluster).configMaps()
-                        .inNamespace("default")
+                        .inNamespace(resolveNamespace(cluster))
                         .withName(cm.getMetadata().getName())
                         .delete();
             }
@@ -397,7 +417,8 @@ public class HelmReleaseService {
     public Recipe addRecipeToRelease(String cluster, String version, Recipe recipe) {
 
         HelmRelease r = getHelmRelease(cluster, version);
-        if (r == null) return null;
+        if (r == null)
+            return null;
 
         r.getRecipes().add(recipe);
         storeDraft(cluster, r);
@@ -409,7 +430,8 @@ public class HelmReleaseService {
     public Recipe updateRecipeInRelease(String cluster, String version, String recipeVersion, Recipe recipe) {
 
         HelmRelease r = getHelmRelease(cluster, version);
-        if (r == null) return null;
+        if (r == null)
+            return null;
 
         for (int i = 0; i < r.getRecipes().size(); i++) {
             if (r.getRecipes().get(i).getVersion().equals(recipeVersion)) {
@@ -428,7 +450,8 @@ public class HelmReleaseService {
     public boolean deleteRecipeFromRelease(String cluster, String version, String recipeVersion) {
 
         HelmRelease r = getHelmRelease(cluster, version);
-        if (r == null) return false;
+        if (r == null)
+            return false;
 
         boolean removed = r.getRecipes().removeIf(x -> x.getVersion().equals(recipeVersion));
 
@@ -443,7 +466,8 @@ public class HelmReleaseService {
     public Map<String, ComponentSpec> getComponentsByRecipe(String cluster, String version, String recipeVersion) {
 
         HelmRelease r = getHelmRelease(cluster, version);
-        if (r == null) return Collections.emptyMap();
+        if (r == null)
+            return Collections.emptyMap();
 
         return r.getRecipes().stream()
                 .filter(x -> x.getVersion().equals(recipeVersion))
@@ -455,7 +479,8 @@ public class HelmReleaseService {
     public List<String> getUpgradePaths(String cluster, String version, String recipeVersion) {
 
         HelmRelease r = getHelmRelease(cluster, version);
-        if (r == null) return Collections.emptyList();
+        if (r == null)
+            return Collections.emptyList();
 
         return r.getRecipes().stream()
                 .filter(x -> x.getVersion().equals(recipeVersion))
@@ -471,7 +496,8 @@ public class HelmReleaseService {
         HelmRelease r1 = getHelmRelease(cluster, from);
         HelmRelease r2 = getHelmRelease(cluster, to);
 
-        if (r1 == null || r2 == null) return Map.of("error", "Invalid versions");
+        if (r1 == null || r2 == null)
+            return Map.of("error", "Invalid versions");
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("from", from);
@@ -512,7 +538,8 @@ public class HelmReleaseService {
         }
 
         for (String v : fromByVersion.keySet()) {
-            if (!toByVersion.containsKey(v)) continue;
+            if (!toByVersion.containsKey(v))
+                continue;
 
             Recipe a = fromByVersion.get(v);
             Recipe b = toByVersion.get(v);
@@ -549,10 +576,14 @@ public class HelmReleaseService {
             }
 
             Map<String, Object> compChanges = new LinkedHashMap<>();
-            if (!compsAdded.isEmpty()) compChanges.put("added", compsAdded);
-            if (!compsRemoved.isEmpty()) compChanges.put("removed", compsRemoved);
-            if (!compsChanged.isEmpty()) compChanges.put("changed", compsChanged);
-            if (!compChanges.isEmpty()) changes.put("components", compChanges);
+            if (!compsAdded.isEmpty())
+                compChanges.put("added", compsAdded);
+            if (!compsRemoved.isEmpty())
+                compChanges.put("removed", compsRemoved);
+            if (!compsChanged.isEmpty())
+                compChanges.put("changed", compsChanged);
+            if (!compChanges.isEmpty())
+                changes.put("components", compChanges);
 
             List<String> pathsFrom = safeUpgradeTo(a);
             List<String> pathsTo = safeUpgradeTo(b);
@@ -563,16 +594,20 @@ public class HelmReleaseService {
             List<String> pathsRemoved = new ArrayList<>();
 
             for (String p : toSet) {
-                if (!fromSet.contains(p)) pathsAdded.add(p);
+                if (!fromSet.contains(p))
+                    pathsAdded.add(p);
             }
             for (String p : fromSet) {
-                if (!toSet.contains(p)) pathsRemoved.add(p);
+                if (!toSet.contains(p))
+                    pathsRemoved.add(p);
             }
 
             if (!pathsAdded.isEmpty() || !pathsRemoved.isEmpty()) {
                 Map<String, Object> pathChanges = new LinkedHashMap<>();
-                if (!pathsAdded.isEmpty()) pathChanges.put("added", pathsAdded);
-                if (!pathsRemoved.isEmpty()) pathChanges.put("removed", pathsRemoved);
+                if (!pathsAdded.isEmpty())
+                    pathChanges.put("added", pathsAdded);
+                if (!pathsRemoved.isEmpty())
+                    pathChanges.put("removed", pathsRemoved);
                 changes.put("upgrade_to", pathChanges);
             }
 
@@ -607,7 +642,8 @@ public class HelmReleaseService {
         List<String> fromVersions = new ArrayList<>();
         String targetVersion = target.getVersion();
         for (Recipe recipe : recipes) {
-            if (recipe == null) continue;
+            if (recipe == null)
+                continue;
             List<String> upgradeTo = safeUpgradeTo(recipe);
             if (upgradeTo.contains(targetVersion)) {
                 fromVersions.add(recipe.getVersion());
@@ -617,23 +653,25 @@ public class HelmReleaseService {
     }
 
     private Map<String, ComponentSpec> copyComponents(Map<String, ComponentSpec> components) {
-        if (components == null) return new LinkedHashMap<>();
+        if (components == null)
+            return new LinkedHashMap<>();
         Map<String, ComponentSpec> copy = new LinkedHashMap<>();
         for (Map.Entry<String, ComponentSpec> entry : components.entrySet()) {
             ComponentSpec spec = entry.getValue();
-            if (spec == null) continue;
+            if (spec == null)
+                continue;
             copy.put(entry.getKey(), new ComponentSpec(
                     spec.getVersion(),
                     spec.getReleaseDate(),
                     spec.getUpgradeFrom(),
-                    spec.getUpgradeTo()
-            ));
+                    spec.getUpgradeTo()));
         }
         return copy;
     }
 
     public Optional<String> validateComponentUpgradeCompatibility(HelmRelease release) {
-        if (release == null || release.getRecipes() == null) return Optional.empty();
+        if (release == null || release.getRecipes() == null)
+            return Optional.empty();
 
         List<Recipe> recipes = release.getRecipes();
         Map<String, Recipe> recipesByVersion = recipes.stream()
@@ -648,9 +686,10 @@ public class HelmReleaseService {
                 String compName = entry.getKey();
                 ComponentSpec spec = entry.getValue();
                 String compVersion = componentVersion(spec);
-                if (compVersion == null) continue;
-                Map<String, ComponentSpec> byVersion =
-                        rulesByComponentVersion.computeIfAbsent(compName, k -> new LinkedHashMap<>());
+                if (compVersion == null)
+                    continue;
+                Map<String, ComponentSpec> byVersion = rulesByComponentVersion.computeIfAbsent(compName,
+                        k -> new LinkedHashMap<>());
                 ComponentSpec existing = byVersion.get(compVersion);
                 if (existing != null && !componentRuleEquals(existing, spec)) {
                     return Optional.of(
@@ -658,16 +697,16 @@ public class HelmReleaseService {
                 }
                 byVersion.put(compVersion, new ComponentSpec(
                         compVersion,
-                    spec.getReleaseDate(),
+                        spec.getReleaseDate(),
                         spec.getUpgradeFrom(),
-                        spec.getUpgradeTo()
-                ));
+                        spec.getUpgradeTo()));
             }
         }
 
         for (Recipe target : recipes) {
             List<String> fromVersions = getUpgradeFromVersions(recipes, target);
-            if (fromVersions.isEmpty()) continue;
+            if (fromVersions.isEmpty())
+                continue;
 
             for (String fromVersion : fromVersions) {
                 Recipe source = recipesByVersion.get(fromVersion);
@@ -682,7 +721,8 @@ public class HelmReleaseService {
                     String compName = compEntry.getKey();
                     String targetVersion = componentVersion(compEntry.getValue());
                     String sourceVersion = componentVersion(sourceComponents.get(compName));
-                    if (sourceVersion == null || targetVersion == null) continue;
+                    if (sourceVersion == null || targetVersion == null)
+                        continue;
 
                     ComponentSpec targetRule = rulesByComponentVersion
                             .getOrDefault(compName, Collections.emptyMap())
@@ -707,7 +747,8 @@ public class HelmReleaseService {
     }
 
     private boolean isAllowed(List<String> allowed, String version) {
-        if (allowed == null || allowed.isEmpty()) return true;
+        if (allowed == null || allowed.isEmpty())
+            return true;
         return allowed.contains(version);
     }
 
@@ -726,11 +767,13 @@ public class HelmReleaseService {
 
     private Map<String, Object> buildComponentPayload(Map<String, ComponentSpec> components) {
         Map<String, Object> payload = new LinkedHashMap<>();
-        if (components == null) return payload;
+        if (components == null)
+            return payload;
 
         for (Map.Entry<String, ComponentSpec> entry : components.entrySet()) {
             ComponentSpec spec = entry.getValue();
-            if (spec == null) continue;
+            if (spec == null)
+                continue;
             Map<String, Object> specMap = new LinkedHashMap<>();
             specMap.put("version", spec.getVersion());
             if (spec.getReleaseDate() != null && !spec.getReleaseDate().isBlank()) {
@@ -749,20 +792,24 @@ public class HelmReleaseService {
     }
 
     private String readText(JsonNode node, String field) {
-        if (node == null) return null;
+        if (node == null)
+            return null;
         JsonNode value = node.get(field);
         return value != null && value.isTextual() ? value.asText() : null;
     }
 
     private JsonNode readFirst(JsonNode node, String primary, String fallback) {
-        if (node == null) return null;
+        if (node == null)
+            return null;
         JsonNode first = node.get(primary);
-        if (first != null) return first;
+        if (first != null)
+            return first;
         return node.get(fallback);
     }
 
     private List<String> readStringList(JsonNode node) {
-        if (node == null) return new ArrayList<>();
+        if (node == null)
+            return new ArrayList<>();
         List<String> values = new ArrayList<>();
         if (node.isArray()) {
             node.forEach(v -> values.add(v.asText()));
@@ -777,16 +824,19 @@ public class HelmReleaseService {
     }
 
     private String normalizeVersion(String version) {
-        if (version == null) return null;
+        if (version == null)
+            return null;
         return version.trim().replaceFirst("^[vV]", "");
     }
 
     private List<String> normalizeVersions(List<String> versions) {
-        if (versions == null) return Collections.emptyList();
+        if (versions == null)
+            return Collections.emptyList();
         List<String> normalized = new ArrayList<>();
         for (String v : versions) {
             String clean = normalizeVersion(v);
-            if (clean != null && !clean.isBlank()) normalized.add(clean);
+            if (clean != null && !clean.isBlank())
+                normalized.add(clean);
         }
         return normalized;
     }
@@ -801,7 +851,7 @@ public class HelmReleaseService {
 
             HelmRelease parsed = parseConfigMap(cluster, cm);
 
-                if (parsed != null
+            if (parsed != null
                     && parsed.getVersion().equals(version)
                     && !isHelmManaged(cm)) {
 
@@ -809,7 +859,7 @@ public class HelmReleaseService {
                     cm.getData().put(RECIPE_DATA_KEY, buildRecipeJson(release));
 
                     getClient(cluster).configMaps()
-                            .inNamespace("default")
+                            .inNamespace(resolveNamespace(cluster))
                             .resource(cm)
                             .update();
 

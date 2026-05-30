@@ -17,6 +17,10 @@ public class KubernetesConfig {
 
         Map<String, KubernetesClient> clients = new HashMap<>();
 
+        if (properties.getClusters() == null || properties.getClusters().isEmpty()) {
+            return clients;
+        }
+
         properties.getClusters().forEach((name, cluster) -> {
 
             // 🔥 Automatically reads ~/.kube/config

@@ -24,16 +24,19 @@ gitops:
 jenkins:
   url: ${JENKINS_URL:http://localhost:8080}
   job: ${JENKINS_JOB:hpe-recipe}
-  username: ${JENKINS_USER}
-  token: ${JENKINS_TOKEN}
+  username: ${JENKINS_USER:}
+  token: ${JENKINS_TOKEN:}
 kubernetes:
-
   clusters:
     dev:
-      context: dev
+      context: ${K8S_DEV_CONTEXT:dev}
+      namespace: ${K8S_DEV_NAMESPACE:recipe-detection}
     prod:
-      context: prod
+      context: ${K8S_PROD_CONTEXT:prod}
+      namespace: ${K8S_PROD_NAMESPACE:recipe-detection}
     qa:
-      context: qa
+      context: ${K8S_QA_CONTEXT:qa}
+      namespace: ${K8S_QA_NAMESPACE:recipe-detection}
     integration:
-      context: integration
+      context: ${K8S_INTEGRATION_CONTEXT:integration}
+      namespace: ${K8S_INTEGRATION_NAMESPACE:recipe-detection}

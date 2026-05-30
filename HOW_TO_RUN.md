@@ -104,14 +104,20 @@ jenkins:
 kubernetes:
   clusters:
     dev:
-      context: dev
+      context: ${K8S_DEV_CONTEXT:dev}
+      namespace: ${K8S_DEV_NAMESPACE:recipe-detection}
     prod:
-      context: prod
+      context: ${K8S_PROD_CONTEXT:prod}
+      namespace: ${K8S_PROD_NAMESPACE:recipe-detection}
     qa:
-      context: qa
+      context: ${K8S_QA_CONTEXT:qa}
+      namespace: ${K8S_QA_NAMESPACE:recipe-detection}
     integration:
-      context: integration
+      context: ${K8S_INTEGRATION_CONTEXT:integration}
+      namespace: ${K8S_INTEGRATION_NAMESPACE:recipe-detection}
 ```
+
+The frontend cluster selector is populated from the backend configuration above. If you want `dev` or `prod` to point at a different Kubernetes cluster, change the corresponding `K8S_*_CONTEXT` value to match your kubeconfig context name.
 
 ---
 

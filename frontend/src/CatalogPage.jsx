@@ -2,37 +2,42 @@ import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import T from './theme';
 import { btnSecondary, cardStyle } from './ui/styles';
+import useClusterOptions from './hooks/useClusterOptions';
 
 const API_BASE = '/api';
 
 export default function CatalogPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const allowedClusters = ['dev', 'prod', 'qa', 'integration'];
-  const initialCluster = allowedClusters.includes(searchParams.get('cluster'))
+  const { clusters: configuredClusters } = useClusterOptions();
+  const clusterNames = configuredClusters.length > 0
+    ? configuredClusters.map((cluster) => cluster.name).filter(Boolean)
+    : ['dev', 'prod', 'qa', 'integration'];
+  const defaultCluster = clusterNames[0] || 'dev';
+  const initialCluster = clusterNames.includes(searchParams.get('cluster'))
     ? searchParams.get('cluster')
-    : 'dev';
+    : defaultCluster;
   const [cluster, setCluster] = useState(initialCluster);
   const [catalogs, setCatalogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const urlCluster = allowedClusters.includes(searchParams.get('cluster'))
+    const urlCluster = clusterNames.includes(searchParams.get('cluster'))
       ? searchParams.get('cluster')
-      : 'dev';
+      : defaultCluster;
     setCluster((prev) => (prev === urlCluster ? prev : urlCluster));
-  }, [searchParams]);
+  }, [searchParams, clusterNames, defaultCluster]);
 
   useEffect(() => {
-    const urlCluster = allowedClusters.includes(searchParams.get('cluster'))
+    const urlCluster = clusterNames.includes(searchParams.get('cluster'))
       ? searchParams.get('cluster')
-      : 'dev';
+      : defaultCluster;
     if (urlCluster !== cluster) {
       const next = new URLSearchParams(searchParams);
       next.set('cluster', cluster);
       setSearchParams(next, { replace: true });
     }
-  }, [cluster, searchParams, setSearchParams, allowedClusters]);
+  }, [cluster, searchParams, setSearchParams, clusterNames, defaultCluster]);
 
   useEffect(() => {
     setLoading(true);
@@ -74,10 +79,9 @@ export default function CatalogPage() {
             ...btnSecondary,
             padding: '7px 10px',
           }}>
-            <option value="dev">DEV</option>
-            <option value="prod">PROD</option>
-            <option value="qa">QA</option>
-            <option value="integration">INTEGRATION</option>
+            {clusterNames.map((name) => (
+              <option key={name} value={name}>{name.toUpperCase()}</option>
+            ))}
           </select>
           <span style={{ fontSize: 12, color: T.textMuted, whiteSpace: 'nowrap' }}>
             Cluster: {cluster.toUpperCase()}
