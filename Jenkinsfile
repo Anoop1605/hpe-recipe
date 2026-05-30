@@ -8,7 +8,7 @@ pipeline {
     environment {
         CHART_DIR       = 'helm/recipe-detection-chart'
         HELM_CMD        = 'helm'
-        KUBE_NAMESPACE  = 'default'
+        KUBE_NAMESPACE  = "${params.CLUSTER}"
         API_URL         = 'http://localhost:8081/api'
     }
 
