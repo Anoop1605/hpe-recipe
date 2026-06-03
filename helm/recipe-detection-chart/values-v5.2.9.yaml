@@ -1,0 +1,34 @@
+recipeData:
+  chartVersion: 5.2.9
+  catalog_name: TEST
+  catalog_description: Test Release for auto generate source recipe
+  release_date: '2026-06-03'
+  catalog_status: GA
+  maintainer: Testing Team
+  recipes:
+  - version: 1.9.5
+    description: HPE Ezmeral Runtime 1.9.5
+    release_date: '2026-06-03'
+    status: GA
+    components:
+      kafka:
+        version: 2.3.2
+        release_date: '2026-06-03'
+        upgrade_from:
+        - 2.3.2
+        upgrade_to:
+        - 2.3.3
+      spark:
+        version: 3.3.2
+        release_date: '2026-06-03'
+        upgrade_from:
+        - 3.3.2
+        upgrade_to:
+        - 3.3.3
+      Hyper visor:
+        version: 3.1.2
+        release_date: '2026-06-03'
+        upgrade_from:
+        - 3.1.2
+        upgrade_to:
+        - 3.2.4
